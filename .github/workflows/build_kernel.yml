@@ -1,0 +1,94 @@
+name: Build Kernel
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Maximize Build Space
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 8192
+        swap-size-mb: 8192
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-docker-images: 'true'
+
+    - name: Install Repo
+      run: |
+        mkdir -p ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        echo "~/bin" >> $GITHUB_PATH
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "action@github.com"
+
+    - name: Run Build Script
+      run: |
+        set -eo pipefail
+        
+        rm -rf kernel
+        mkdir kernel
+        cd kernel
+
+        wget -O manifest.xml https://ci.android.com/builds/submitted/15521788/kernel_aarch64/latest/raw/manifest_15521788.xml
+        repo init -u https://android.googlesource.com/kernel/manifest --depth=1
+        mv manifest.xml .repo/manifests/
+        repo init -m manifest.xml --depth=1
+        repo sync -c --no-clone-bundle --no-tags -j"$(nproc)"
+
+        wget -qO magisk.zip "$(curl -fsSL https://raw.githubusercontent.com/topjohnwu/magisk-files/master/stable.json | jq -er '.magisk.link')"
+        unzip -q magisk.zip -d magisk_tmp
+        mkdir magiskboot
+        cp magisk_tmp/lib/x86_64/libmagiskboot.so magiskboot/magiskboot
+        rm -rf magisk.zip magisk_tmp
+        wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/MMI-W1VCS36H.14-20-19-7/boot.img"
+
+        curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+
+        git clone --depth=1 --branch gki-android14-6.1-dev --single-branch https://gitlab.com/simonpunk/susfs4ksu.git
+        cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
+        cp -r ./susfs4ksu/kernel_patches/fs/* ./common/fs/
+        cp -r ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+        patch -d ./common -p1 < ./common/50_add_susfs_in_gki-android14-6.1.patch
+        rm ./common/50_add_susfs_in_gki-android14-6.1.patch
+
+        wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/bpf/bpf,baseband_guard/ } }' ./common/security/Kconfig
+
+        git clone --depth=1 https://github.com/maxsteeel/nomount.git
+        patch -d ./common -p1 < ./nomount/kernel/patches/nomount_6.1_kernel_integration.patch
+        cp -r ./nomount/kernel/src/* ./common/fs/
+
+        rm common/android/abi_gki_protected_exports_aarch64
+        rm common/android/abi_gki_protected_exports_x86_64
+        touch common/android/abi_gki_protected_exports_aarch64
+        touch common/android/abi_gki_protected_exports_x86_64
+
+        tools/bazel build --config=fast //common:kernel_aarch64_dist
+
+        cp bazel-bin/common/kernel_aarch64/Image magiskboot/
+        cd magiskboot
+        chmod +x magiskboot
+        ./magiskboot unpack boot.img
+        mv -f Image kernel
+        ./magiskboot repack boot.img
+        
+        DATE=$(date +'%Y-%m-%d')
+        cp -f new-boot.img $GITHUB_WORKSPACE/boot-${DATE}.img
+        echo "BUILD_DATE=${DATE}" >> $GITHUB_ENV
+
+    - name: Upload Patched Boot Image
+      uses: actions/upload-artifact@v4
+      with:
+        name: boot-${{ env.BUILD_DATE }}
+        path: boot-*.img
