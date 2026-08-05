@@ -74,6 +74,11 @@ jobs:
         touch common/android/abi_gki_protected_exports_aarch64
         touch common/android/abi_gki_protected_exports_x86_64
 
+        cd common
+        git add .
+        git commit -m "Commit Changes"
+        cd ..
+        
         tools/bazel build --config=fast //common:kernel_aarch64_dist
 
         cp bazel-bin/common/kernel_aarch64/Image magiskboot/
@@ -88,7 +93,7 @@ jobs:
         echo "BUILD_DATE=${DATE}" >> $GITHUB_ENV
 
     - name: Upload Patched Boot Image
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
-        name: boot-${{ env.BUILD_DATE }}
         path: boot-*.img
+        archive: false
