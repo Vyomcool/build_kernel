@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+      contents: write
 
     steps:
     - name: Maximize Build Space
@@ -92,8 +93,9 @@ jobs:
         cp -f new-boot.img $GITHUB_WORKSPACE/boot-${DATE}.img
         echo "BUILD_DATE=${DATE}" >> $GITHUB_ENV
 
-    - name: Upload Patched Boot Image
-      uses: actions/upload-artifact@v7
+    - name: Release Patched Boot Image
+      uses: softprops/action-gh-release@v3
       with:
-        path: boot-*.img
-        archive: false
+        tag_name: boot-${{ env.BUILD_DATE }}
+        name: Build ${{ env.BUILD_DATE }}
+        files: boot-*.img
