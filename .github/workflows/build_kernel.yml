@@ -43,10 +43,10 @@ jobs:
         cd kernel
 
         wget -O manifest.xml https://ci.android.com/builds/submitted/15521788/kernel_aarch64/latest/raw/manifest_15521788.xml
-        repo init -u https://android.googlesource.com/kernel/manifest --depth=1
+        repo init -u https://android.googlesource.com/kernel/manifest
         mv manifest.xml .repo/manifests/
-        repo init -m manifest.xml --depth=1
-        repo sync -c --no-clone-bundle --no-tags -j"$(nproc)"
+        repo init -m manifest.xml
+        repo sync
 
         wget -qO magisk.zip "$(curl -fsSL https://raw.githubusercontent.com/topjohnwu/magisk-files/master/stable.json | jq -er '.magisk.link')"
         unzip -q magisk.zip -d magisk_tmp
@@ -57,7 +57,7 @@ jobs:
 
         curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
 
-        git clone --depth=1 --branch gki-android14-6.1-dev --single-branch https://gitlab.com/simonpunk/susfs4ksu.git
+        git clone --branch gki-android14-6.1-dev https://gitlab.com/simonpunk/susfs4ksu.git
         cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
         cp -r ./susfs4ksu/kernel_patches/fs/* ./common/fs/
         cp -r ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
@@ -67,7 +67,7 @@ jobs:
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
         sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/bpf/bpf,baseband_guard/ } }' ./common/security/Kconfig
 
-        git clone --depth=1 https://github.com/maxsteeel/nomount.git
+        git clone https://github.com/maxsteeel/nomount.git
         patch -d ./common -p1 < ./nomount/kernel/patches/nomount_6.1_kernel_integration.patch
         cp -r ./nomount/kernel/src/* ./common/fs/
 
