@@ -81,7 +81,7 @@ jobs:
         git commit -m "Commit Changes"
         cd ..
         
-        tools/bazel build --config=fast //common:kernel_aarch64_dist
+        tools/bazel build --config=fast --config=stamp //common:kernel_aarch64_dist
 
         cp bazel-bin/common/kernel_aarch64/Image magiskboot/
         cd magiskboot
