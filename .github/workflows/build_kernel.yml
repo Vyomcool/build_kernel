@@ -90,7 +90,7 @@ jobs:
         mv -f Image kernel
         ./magiskboot repack boot.img
         
-        DATE=$(date +'%Y-%m-%d')
+        DATE=$(date +'%Y-%m-%d')-run-${{ github.run_number }}
         cp -f new-boot.img $GITHUB_WORKSPACE/boot-${DATE}.img
         echo "BUILD_DATE=${DATE}" >> $GITHUB_ENV
 
