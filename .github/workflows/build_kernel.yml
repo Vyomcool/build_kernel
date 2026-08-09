@@ -43,10 +43,10 @@ jobs:
         cd kernel
 
         wget -O manifest.xml https://ci.android.com/builds/submitted/15521788/kernel_aarch64/latest/raw/manifest_15521788.xml
-        repo init -u https://android.googlesource.com/kernel/manifest
+        repo init -u https://android.googlesource.com/kernel/manifest --depth=1
         mv manifest.xml .repo/manifests/
-        repo init -m manifest.xml
-        repo sync
+        repo init -m manifest.xml --depth=1
+        repo sync -c --no-clone-bundle --no-tags -j"$(nproc)"
 
         wget -qO magisk.zip "$(curl -fsSL https://raw.githubusercontent.com/topjohnwu/magisk-files/master/stable.json | jq -er '.magisk.link')"
         unzip -q magisk.zip -d magisk_tmp
