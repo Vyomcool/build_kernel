@@ -67,9 +67,7 @@ jobs:
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
         sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/bpf/bpf,baseband_guard/ } }' ./common/security/Kconfig
 
-        git clone --depth=1 https://github.com/maxsteeel/nomount.git
-        patch -d ./common -p1 < ./nomount/kernel/patches/nomount_6.1_kernel_integration.patch
-        cp -r ./nomount/kernel/src/* ./common/fs/
+        curl https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -s dev
 
         rm common/android/abi_gki_protected_exports_aarch64
         rm common/android/abi_gki_protected_exports_x86_64
