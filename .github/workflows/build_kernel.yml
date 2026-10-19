@@ -42,7 +42,7 @@ jobs:
         mkdir kernel
         cd kernel
 
-        wget -O manifest.xml https://ci.android.com/builds/submitted/16466993/kernel_aarch64/latest/raw/manifest_16466993.xml
+        wget -O manifest.xml https://ci.android.com/builds/submitted/16631364/kernel_aarch64/latest/raw/manifest_16631364.xml
         repo init -u https://android.googlesource.com/kernel/manifest --depth=1
         mv manifest.xml .repo/manifests/
         repo init -m manifest.xml --depth=1
