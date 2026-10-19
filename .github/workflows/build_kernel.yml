@@ -53,7 +53,7 @@ jobs:
         mkdir magiskboot
         cp magisk_tmp/lib/x86_64/libmagiskboot.so magiskboot/magiskboot
         rm -rf magisk.zip magisk_tmp
-        wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/MMI-W1VCS36H.14-20-19-7/boot.img"
+        wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/MMI-A171VCH.41_9/boot.img"
 
         curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
 
