@@ -79,7 +79,7 @@ jobs:
         git commit -m "Commit Changes"
         cd ..
         
-        tools/bazel build --config=release //common:kernel_aarch64
+        tools/bazel build --config=release --config=local //common:kernel_aarch64
 
         cp bazel-bin/common/kernel_aarch64/Image magiskboot/
         cd magiskboot
