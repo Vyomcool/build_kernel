@@ -55,7 +55,7 @@ jobs:
         rm -rf magisk.zip magisk_tmp
         wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/MMI-A171VCH.41-9/boot.img"
 
-        curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+        curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash -s main
 
         git clone --depth=1 --branch gki-android14-6.1-dev --single-branch https://gitlab.com/simonpunk/susfs4ksu.git
         cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
