@@ -35,6 +35,8 @@ jobs:
         git config --global user.email "action@github.com"
 
     - name: Run Build Script
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
         
@@ -48,7 +50,7 @@ jobs:
         repo init -m manifest.xml --depth=1
         repo sync -c --no-clone-bundle --no-tags -j"$(nproc)"
 
-        wget -qO magisk.zip "$(curl -fsSL https://raw.githubusercontent.com/topjohnwu/magisk-files/master/stable.json | jq -er '.magisk.link')"
+        gh release download --repo topjohnwu/Magisk --pattern 'Magisk-v*.apk' -O magisk.zip
         unzip -q magisk.zip -d magisk_tmp
         mkdir magiskboot
         cp magisk_tmp/lib/x86_64/libmagiskboot.so magiskboot/magiskboot
