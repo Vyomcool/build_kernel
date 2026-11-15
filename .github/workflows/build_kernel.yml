@@ -88,13 +88,16 @@ jobs:
         rm -rf magisk.zip magisk_tmp
         wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/shiba-cp4a.261105.040.a1/boot.img"
 
-        curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
         git clone --depth=1 --branch gki-android14-6.1-dev --single-branch https://gitlab.com/simonpunk/susfs4ksu.git
+        cp ./susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
         cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
         cp -r ./susfs4ksu/kernel_patches/fs/* ./common/fs/
         cp -r ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+        patch -d ./KernelSU -p1 < ./KernelSU/10_enable_susfs_for_ksu.patch
         patch -d ./common -p1 < ./common/50_add_susfs_in_gki-android14-6.1.patch
+        rm ./KernelSU/10_enable_susfs_for_ksu.patch
         rm ./common/50_add_susfs_in_gki-android14-6.1.patch
 
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
