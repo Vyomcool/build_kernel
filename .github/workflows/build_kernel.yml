@@ -2,11 +2,42 @@ name: Build Kernel
 
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Build even if nothing changed'
+        type: boolean
+        default: false
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 * * * *'
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.compare.outputs.changed }}
+      shas: ${{ steps.compare.outputs.shas }}
+    steps:
+    - name: Compare upstream commits
+      id: compare
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -eo pipefail
+        KSUN=$(git ls-remote https://github.com/pershoot/KernelSU-Next.git refs/heads/dev-susfs | cut -f1)
+        SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
+        NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
+        if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
+        CURRENT="upstream: ksun=${KSUN} susfs=${SUSFS} nomount=${NOMOUNT}"
+        LAST=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep '^upstream:' || true)
+        echo "shas=$CURRENT" >> "$GITHUB_OUTPUT"
+        if [ "$CURRENT" != "$LAST" ] || [ "${{ inputs.force }}" = "true" ]; then
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+        fi
   build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -97,6 +128,7 @@ jobs:
     - name: Release Patched Boot Image
       uses: softprops/action-gh-release@v3
       with:
+        body: ${{ needs.check.outputs.shas }}
         tag_name: boot-${{ env.BUILD_DATE }}
         name: Build ${{ env.BUILD_DATE }}
         files: boot-*.img
