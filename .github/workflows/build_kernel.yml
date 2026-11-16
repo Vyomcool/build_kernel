@@ -42,8 +42,27 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write
+      actions: write
 
     steps:
+    - name: Skip if already built
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -eo pipefail
+        KSU=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
+        SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
+        NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
+        if [ -z "$KSU" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
+        CURRENT="upstream: ksu=${KSU} susfs=${SUSFS} nomount=${NOMOUNT}"
+        LAST=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep '^upstream:' || true)
+        if [ "$LAST" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
+          echo "Already released, cancelling."
+          gh run cancel ${{ github.run_id }} --repo "$GITHUB_REPOSITORY"
+          sleep 120
+          exit 1
+        fi
+        
     - name: Maximize Build Space
       uses: easimon/maximize-build-space@master
       with:
@@ -106,6 +125,11 @@ jobs:
 
         curl https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -s dev
 
+        KSU_SHA=$(git -C KernelSU rev-parse HEAD)
+        SUSFS_SHA=$(git -C susfs4ksu rev-parse HEAD)
+        NOMOUNT_SHA=$(git -C NoMount rev-parse HEAD)
+        echo "BUILT_SHAS=upstream: ksu=${KSU_SHA} susfs=${SUSFS_SHA} nomount=${NOMOUNT_SHA}" >> $GITHUB_ENV
+
         rm common/android/abi_gki_protected_exports_aarch64
         rm common/android/abi_gki_protected_exports_x86_64
         touch common/android/abi_gki_protected_exports_aarch64
@@ -132,7 +156,7 @@ jobs:
     - name: Release Patched Boot Image
       uses: softprops/action-gh-release@v3
       with:
-        body: ${{ needs.check.outputs.shas }}
+        body: ${{ env.BUILT_SHAS }}
         tag_name: boot-${{ env.BUILD_DATE }}
         name: Build ${{ env.BUILD_DATE }}
         files: boot-*.img
