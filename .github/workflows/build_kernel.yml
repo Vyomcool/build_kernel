@@ -20,7 +20,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        KSUN=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
+        KSUN=$(git ls-remote https://github.com/pershoot/KernelSU-Next.git refs/heads/dev-susfs | cut -f1)
         SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
         NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
         if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
@@ -48,7 +48,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        KSUN=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
+        KSUN=$(git ls-remote https://github.com/pershoot/KernelSU-Next.git refs/heads/dev-susfs | cut -f1)
         SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
         NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
         if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
@@ -120,7 +120,7 @@ jobs:
 
         curl -fsSL https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -s dev
 
-        KSUN_SHA=$(git -C KernelSU rev-parse HEAD)
+        KSUN_SHA=$(git -C KernelSU-Next rev-parse HEAD)
         SUSFS_SHA=$(git -C susfs4ksu rev-parse HEAD)
         NOMOUNT_SHA=$(git -C NoMount rev-parse HEAD)
         echo "BUILT_SHAS=upstream: ksun=${KSUN_SHA} susfs=${SUSFS_SHA} nomount=${NOMOUNT_SHA}" >> $GITHUB_ENV
