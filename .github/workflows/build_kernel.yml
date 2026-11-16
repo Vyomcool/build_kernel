@@ -7,8 +7,10 @@ on:
         description: 'Build even if nothing changed'
         type: boolean
         default: false
-  schedule:
-    - cron: '43 * * * *'
+
+concurrency:
+  group: build-kernel
+  cancel-in-progress: false
 
 jobs:
   check:
