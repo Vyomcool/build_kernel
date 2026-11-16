@@ -76,7 +76,7 @@ jobs:
     - name: Install Repo
       run: |
         mkdir -p ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o ~/bin/repo
         chmod a+x ~/bin/repo
         echo "~/bin" >> $GITHUB_PATH
 
@@ -108,7 +108,7 @@ jobs:
         rm -rf magisk.zip magisk_tmp
         wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/shiba-cp4a.261105.040.a1/boot.img"
 
-        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+        curl -fsSL "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
         git clone --depth=1 --branch gki-android14-6.1-dev --single-branch https://gitlab.com/simonpunk/susfs4ksu.git
         cp ./susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
@@ -123,7 +123,7 @@ jobs:
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
         sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/bpf/bpf,baseband_guard/ } }' ./common/security/Kconfig
 
-        curl https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -s dev
+        curl -fsSL https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -s dev
 
         KSU_SHA=$(git -C KernelSU rev-parse HEAD)
         SUSFS_SHA=$(git -C susfs4ksu rev-parse HEAD)
