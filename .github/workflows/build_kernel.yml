@@ -20,11 +20,11 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        KSU=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
+        KSUN=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
         SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
         NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
-        if [ -z "$KSU" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
-        CURRENT="upstream: ksu=${KSU} susfs=${SUSFS} nomount=${NOMOUNT}"
+        if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
+        CURRENT="upstream: ksun=${KSUN} susfs=${SUSFS} nomount=${NOMOUNT}"
         LAST=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep '^upstream:' || true)
         if [ "$CURRENT" != "$LAST" ] || [ "${{ inputs.force }}" = "true" ]; then
           echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -48,11 +48,11 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        KSU=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
+        KSUN=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
         SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
         NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
-        if [ -z "$KSU" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
-        CURRENT="upstream: ksu=${KSU} susfs=${SUSFS} nomount=${NOMOUNT}"
+        if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
+        CURRENT="upstream: ksun=${KSUN} susfs=${SUSFS} nomount=${NOMOUNT}"
         LAST=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep '^upstream:' || true)
         if [ "$LAST" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
           echo "Already released, cancelling."
@@ -106,16 +106,13 @@ jobs:
         rm -rf magisk.zip magisk_tmp
         wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/shiba-cp4a.261105.040.a1/boot.img"
 
-        curl -fsSL "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+        curl -fsSL "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
 
         git clone --depth=1 --branch gki-android14-6.1-dev --single-branch https://gitlab.com/simonpunk/susfs4ksu.git
-        cp ./susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU/
         cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
         cp -r ./susfs4ksu/kernel_patches/fs/* ./common/fs/
         cp -r ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-        patch -d ./KernelSU -p1 < ./KernelSU/10_enable_susfs_for_ksu.patch
         patch -d ./common -p1 < ./common/50_add_susfs_in_gki-android14-6.1.patch
-        rm ./KernelSU/10_enable_susfs_for_ksu.patch
         rm ./common/50_add_susfs_in_gki-android14-6.1.patch
 
         wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
@@ -123,10 +120,10 @@ jobs:
 
         curl -fsSL https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -s dev
 
-        KSU_SHA=$(git -C KernelSU rev-parse HEAD)
+        KSUN_SHA=$(git -C KernelSU rev-parse HEAD)
         SUSFS_SHA=$(git -C susfs4ksu rev-parse HEAD)
         NOMOUNT_SHA=$(git -C NoMount rev-parse HEAD)
-        echo "BUILT_SHAS=upstream: ksu=${KSU_SHA} susfs=${SUSFS_SHA} nomount=${NOMOUNT_SHA}" >> $GITHUB_ENV
+        echo "BUILT_SHAS=upstream: ksun=${KSUN_SHA} susfs=${SUSFS_SHA} nomount=${NOMOUNT_SHA}" >> $GITHUB_ENV
 
         rm common/android/abi_gki_protected_exports_aarch64
         rm common/android/abi_gki_protected_exports_x86_64
