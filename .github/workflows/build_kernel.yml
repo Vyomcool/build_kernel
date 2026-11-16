@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.compare.outputs.changed }}
-      shas: ${{ steps.compare.outputs.shas }}
     steps:
     - name: Compare upstream commits
       id: compare
@@ -27,7 +26,6 @@ jobs:
         if [ -z "$KSU" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
         CURRENT="upstream: ksu=${KSU} susfs=${SUSFS} nomount=${NOMOUNT}"
         LAST=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep '^upstream:' || true)
-        echo "shas=$CURRENT" >> "$GITHUB_OUTPUT"
         if [ "$CURRENT" != "$LAST" ] || [ "${{ inputs.force }}" = "true" ]; then
           echo "changed=true" >> "$GITHUB_OUTPUT"
         else
