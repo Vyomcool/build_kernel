@@ -148,10 +148,32 @@ jobs:
         cp -f new-boot.img $GITHUB_WORKSPACE/boot-${DATE}.img
         echo "BUILD_DATE=${DATE}" >> $GITHUB_ENV
 
+    - name: Get Latest Manager CI Run
+      id: manager
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -eo pipefail
+        RUN=$(gh run list --repo KernelSU-Next/KernelSU-Next \
+          --workflow "Build Manager CI" --branch dev --status success \
+          --limit 1 --json number,url,headSha \
+          -q '.[0] | "\(.url) \(.headSha) \(.number)"' || true)
+        if [ -n "$RUN" ]; then
+          URL=$(echo "$RUN" | cut -d' ' -f1)
+          SHA=$(echo "$RUN" | cut -d' ' -f2)
+          NUM=$(echo "$RUN" | cut -d' ' -f3)
+          echo "line=Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}" >> "$GITHUB_OUTPUT"
+        else
+          echo "line=Manager (dev CI): not found" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Release Patched Boot Image
       uses: softprops/action-gh-release@v3
       with:
-        body: ${{ env.BUILT_SHAS }}
+        body: |
+          ${{ env.BUILT_SHAS }}
+
+          ${{ steps.manager.outputs.line }}
         tag_name: boot-${{ env.BUILD_DATE }}
         name: Build ${{ env.BUILD_DATE }}
         files: boot-*.img
