@@ -17,8 +17,9 @@ jobs:
     outputs:
       changed: ${{ steps.compare.outputs.changed }}
       update_manager: ${{ steps.compare.outputs.update_manager }}
+      update_module: ${{ steps.compare.outputs.update_module }}
     steps:
-    - name: Compare upstream commits and manager CI
+    - name: Compare upstream commits, manager CI and module CI
       id: compare
       env:
         GH_TOKEN: ${{ github.token }}
@@ -35,18 +36,34 @@ jobs:
         if [ "$CURRENT" != "$LAST" ] || [ "${{ inputs.force }}" = "true" ]; then
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "update_manager=false" >> "$GITHUB_OUTPUT"
+          echo "update_module=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
         echo "changed=false" >> "$GITHUB_OUTPUT"
 
-        NEW_MGR=$(gh run list --repo KernelSU-Next/KernelSU-Next \
-          --workflow "Build Manager CI" --branch dev --status success \
-          --limit 1 --json number -q '.[0].number' 2>/dev/null || true)
-        REL_MGR=$(echo "$BODY" | grep -o 'Build Manager CI #[0-9]*' | grep -o '[0-9]*$' || true)
-        echo "Release manager: ${REL_MGR:-none}, latest successful manager: ${NEW_MGR:-none}"
+        latest_success() {
+          gh run list --repo "$1" --workflow "$2" --branch dev --status success \
+            --limit 1 --json number -q '.[0].number' 2>/dev/null || true
+        }
+        is_newer() {
+          [ -n "$1" ] && { [ -z "$2" ] || [ "$1" -gt "$2" ]; }
+        }
 
-        if [ -z "$NEW_MGR" ] || { [ -n "$REL_MGR" ] && [ "$NEW_MGR" -le "$REL_MGR" ]; }; then
+        NEW_MGR=$(latest_success KernelSU-Next/KernelSU-Next "Build Manager CI")
+        REL_MGR=$(echo "$BODY" | grep -o 'Build Manager CI #[0-9]*' | grep -o '[0-9]*$' || true)
+        NEW_MOD=$(latest_success maxsteeel/nomount "build module")
+        REL_MOD=$(echo "$BODY" | grep -o 'build module #[0-9]*' | grep -o '[0-9]*$' || true)
+        echo "Manager: release ${REL_MGR:-none}, latest ${NEW_MGR:-none}"
+        echo "Module:  release ${REL_MOD:-none}, latest ${NEW_MOD:-none}"
+
+        UPD_MGR=false
+        UPD_MOD=false
+        if is_newer "$NEW_MGR" "$REL_MGR"; then UPD_MGR=true; fi
+        if is_newer "$NEW_MOD" "$REL_MOD"; then UPD_MOD=true; fi
+
+        if [ "$UPD_MGR" = "false" ] && [ "$UPD_MOD" = "false" ]; then
           echo "update_manager=false" >> "$GITHUB_OUTPUT"
+          echo "update_module=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
@@ -63,39 +80,57 @@ jobs:
         done
 
         if [ "$BUSY" = "true" ]; then
-          echo "Kernel build in progress, skipping manager update."
+          echo "Kernel build in progress, skipping link updates."
           echo "update_manager=false" >> "$GITHUB_OUTPUT"
+          echo "update_module=false" >> "$GITHUB_OUTPUT"
         else
-          echo "update_manager=true" >> "$GITHUB_OUTPUT"
+          echo "update_manager=${UPD_MGR}" >> "$GITHUB_OUTPUT"
+          echo "update_module=${UPD_MOD}" >> "$GITHUB_OUTPUT"
         fi
         
-  update-manager:
+  update-links:
     needs: check
-    if: needs.check.outputs.update_manager == 'true'
+    if: needs.check.outputs.update_manager == 'true' || needs.check.outputs.update_module == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-    - name: Update manager link on latest release
+    - name: Update manager/module links on latest release
       env:
         GH_TOKEN: ${{ github.token }}
+        UPD_MGR: ${{ needs.check.outputs.update_manager }}
+        UPD_MOD: ${{ needs.check.outputs.update_module }}
       run: |
         set -eo pipefail
-        RUN=$(gh run list --repo KernelSU-Next/KernelSU-Next \
-          --workflow "Build Manager CI" --branch dev --status success \
-          --limit 1 --json number,url,headSha \
-          -q '.[0] | "\(.url) \(.headSha) \(.number)"')
-        URL=$(echo "$RUN" | cut -d' ' -f1)
-        SHA=$(echo "$RUN" | cut -d' ' -f2)
-        NUM=$(echo "$RUN" | cut -d' ' -f3)
-        LINE="Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}"
+        latest_run() {
+          gh run list --repo "$1" --workflow "$2" --branch dev --status success \
+            --limit 1 --json number,url,headSha \
+            -q '.[0] | "\(.url) \(.headSha) \(.number)"'
+        }
 
         TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
         gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
-        grep -v '^Manager (' body.md > new.md || true
-        echo "$LINE" >> new.md
+
+        MGR_LINE=$(grep '^Manager (' body.md || true)
+        MOD_LINE=$(grep '^Module (' body.md || true)
+
+        if [ "$UPD_MGR" = "true" ]; then
+          read -r URL SHA NUM <<< "$(latest_run KernelSU-Next/KernelSU-Next "Build Manager CI")"
+          MGR_LINE="Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}"
+        fi
+        if [ "$UPD_MOD" = "true" ]; then
+          read -r URL SHA NUM <<< "$(latest_run maxsteeel/nomount "build module")"
+          MOD_LINE="Module (build module #${NUM}, commit ${SHA:0:7}): ${URL}"
+        fi
+
+        grep -v -e '^Manager (' -e '^Module (' body.md > new.md || true
+        if [ -n "$MGR_LINE" ]; then echo "$MGR_LINE" >> new.md; fi
+        if [ -n "$MOD_LINE" ]; then echo "$MOD_LINE" >> new.md; fi
+
         gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file new.md
-        echo "Updated $TAG -> $LINE"
+        echo "Updated $TAG:"
+        echo "  $MGR_LINE"
+        echo "  $MOD_LINE"
   
   build:
     needs: check
@@ -214,42 +249,73 @@ jobs:
         cp -f new-boot.img $GITHUB_WORKSPACE/boot-${DATE}.img
         echo "BUILD_DATE=${DATE}" >> $GITHUB_ENV
     
-    - name: Wait for in-progress Manager CI
+    - name: Wait for in-progress Manager CI / Module CI
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        LATEST=$(gh run list --repo KernelSU-Next/KernelSU-Next \
-          --workflow "Build Manager CI" --branch dev --limit 1 \
-          --json databaseId,status -q '.[0] | "\(.databaseId) \(.status)"' || true)
-        ID=$(echo "$LATEST" | cut -d' ' -f1)
-        STATUS=$(echo "$LATEST" | cut -d' ' -f2)
-        if [ -n "$ID" ] && [ "$STATUS" != "completed" ]; then
-          echo "Manager CI run $ID is $STATUS, waiting (max 15 min)..."
-          for i in $(seq 1 15); do
-            S=$(gh run view "$ID" --repo KernelSU-Next/KernelSU-Next --json status -q .status || echo unknown)
-            [ "$S" = "completed" ] && break
-            sleep 60
-          done
+        PENDING=""
+        for SPEC in "KernelSU-Next/KernelSU-Next|Build Manager CI|15" "maxsteeel/nomount|build module|5"; do
+          IFS='|' read -r REPO WF MAX <<< "$SPEC"
+          LATEST=$(gh run list --repo "$REPO" --workflow "$WF" --branch dev --limit 1 \
+            --json databaseId,status -q '.[0] | "\(.databaseId) \(.status)"' || true)
+          ID="${LATEST%% *}"
+          STATUS="${LATEST#* }"
+          if [ -n "$ID" ] && [ "$STATUS" != "completed" ]; then
+            echo "$WF run $ID ($REPO) is $STATUS, waiting (max $MAX min)..."
+            PENDING="$PENDING $REPO|$ID|$MAX"
+          fi
+        done
+
+        if [ -z "$PENDING" ]; then
+          echo "Nothing in progress."
+          exit 0
         fi
+
+        for MIN in $(seq 0 15); do
+          STILL=""
+          for P in $PENDING; do
+            IFS='|' read -r REPO ID MAX <<< "$P"
+            S=$(gh run view "$ID" --repo "$REPO" --json status -q .status || echo unknown)
+            if [ "$S" = "completed" ]; then
+              echo "$REPO run $ID completed after ~${MIN} min."
+            elif [ "$MIN" -ge "$MAX" ]; then
+              echo "$REPO run $ID still $S after ${MAX} min, giving up on it."
+            else
+              STILL="$STILL $P"
+            fi
+          done
+          PENDING="$STILL"
+          if [ -z "$PENDING" ]; then break; fi
+          sleep 60
+        done
     
-    - name: Get Latest Manager CI Run
-      id: manager
+    - name: Get Latest Manager / Module CI Runs
+      id: links
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        RUN=$(gh run list --repo KernelSU-Next/KernelSU-Next \
-          --workflow "Build Manager CI" --branch dev --status success \
-          --limit 1 --json number,url,headSha \
-          -q '.[0] | "\(.url) \(.headSha) \(.number)"' || true)
+        latest_run() {
+          gh run list --repo "$1" --workflow "$2" --branch dev --status success \
+            --limit 1 --json number,url,headSha \
+            -q '.[0] | "\(.url) \(.headSha) \(.number)"' || true
+        }
+
+        RUN=$(latest_run KernelSU-Next/KernelSU-Next "Build Manager CI")
         if [ -n "$RUN" ]; then
-          URL=$(echo "$RUN" | cut -d' ' -f1)
-          SHA=$(echo "$RUN" | cut -d' ' -f2)
-          NUM=$(echo "$RUN" | cut -d' ' -f3)
-          echo "line=Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}" >> "$GITHUB_OUTPUT"
+          read -r URL SHA NUM <<< "$RUN"
+          echo "manager=Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}" >> "$GITHUB_OUTPUT"
         else
-          echo "line=Manager (dev CI): not found" >> "$GITHUB_OUTPUT"
+          echo "manager=Manager (dev CI): not found" >> "$GITHUB_OUTPUT"
+        fi
+
+        RUN=$(latest_run maxsteeel/nomount "build module")
+        if [ -n "$RUN" ]; then
+          read -r URL SHA NUM <<< "$RUN"
+          echo "module=Module (build module #${NUM}, commit ${SHA:0:7}): ${URL}" >> "$GITHUB_OUTPUT"
+        else
+          echo "module=Module (dev CI): not found" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Release Patched Boot Image
@@ -258,7 +324,8 @@ jobs:
         body: |
           ${{ env.BUILT_SHAS }}
 
-          ${{ steps.manager.outputs.line }}
+          ${{ steps.links.outputs.manager }}
+          ${{ steps.links.outputs.module }}
         tag_name: boot-${{ env.BUILD_DATE }}
         name: Build ${{ env.BUILD_DATE }}
         files: boot-*.img
