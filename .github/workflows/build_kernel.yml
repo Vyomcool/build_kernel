@@ -11,10 +11,14 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       changed: ${{ steps.compare.outputs.changed }}
+      update_manager: ${{ steps.compare.outputs.update_manager }}
     steps:
-    - name: Compare upstream commits
+    - name: Compare upstream commits and manager CI
       id: compare
       env:
         GH_TOKEN: ${{ github.token }}
@@ -25,12 +29,74 @@ jobs:
         NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
         if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
         CURRENT="upstream: ksun=${KSUN} susfs=${SUSFS} nomount=${NOMOUNT}"
-        LAST=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep '^upstream:' || true)
+        BODY=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null || true)
+        LAST=$(echo "$BODY" | grep '^upstream:' || true)
+
         if [ "$CURRENT" != "$LAST" ] || [ "${{ inputs.force }}" = "true" ]; then
           echo "changed=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "changed=false" >> "$GITHUB_OUTPUT"
+          echo "update_manager=false" >> "$GITHUB_OUTPUT"
+          exit 0
         fi
+        echo "changed=false" >> "$GITHUB_OUTPUT"
+
+        NEW_MGR=$(gh run list --repo KernelSU-Next/KernelSU-Next \
+          --workflow "Build Manager CI" --branch dev --status success \
+          --limit 1 --json number -q '.[0].number' 2>/dev/null || true)
+        REL_MGR=$(echo "$BODY" | grep -o 'Build Manager CI #[0-9]*' | grep -o '[0-9]*$' || true)
+        echo "Release manager: ${REL_MGR:-none}, latest successful manager: ${NEW_MGR:-none}"
+
+        if [ -z "$NEW_MGR" ] || { [ -n "$REL_MGR" ] && [ "$NEW_MGR" -le "$REL_MGR" ]; }; then
+          echo "update_manager=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        BUSY=false
+        for ID in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow "${{ github.workflow }}" \
+            --limit 20 --json databaseId,status \
+            -q '.[] | select(.status != "completed") | .databaseId'); do
+          [ "$ID" = "${{ github.run_id }}" ] && continue
+          if gh run view "$ID" --repo "$GITHUB_REPOSITORY" --json jobs \
+              -q '.jobs[] | select(.name == "build" and .status != "completed") | .name' | grep -q .; then
+            BUSY=true
+            break
+          fi
+        done
+
+        if [ "$BUSY" = "true" ]; then
+          echo "Kernel build in progress, skipping manager update."
+          echo "update_manager=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "update_manager=true" >> "$GITHUB_OUTPUT"
+        fi
+        
+  update-manager:
+    needs: check
+    if: needs.check.outputs.update_manager == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Update manager link on latest release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -eo pipefail
+        RUN=$(gh run list --repo KernelSU-Next/KernelSU-Next \
+          --workflow "Build Manager CI" --branch dev --status success \
+          --limit 1 --json number,url,headSha \
+          -q '.[0] | "\(.url) \(.headSha) \(.number)"')
+        URL=$(echo "$RUN" | cut -d' ' -f1)
+        SHA=$(echo "$RUN" | cut -d' ' -f2)
+        NUM=$(echo "$RUN" | cut -d' ' -f3)
+        LINE="Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}"
+
+        TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+        gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
+        grep -v '^Manager (' body.md > new.md || true
+        echo "$LINE" >> new.md
+        gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file new.md
+        echo "Updated $TAG -> $LINE"
+  
   build:
     needs: check
     if: needs.check.outputs.changed == 'true'
@@ -147,7 +213,26 @@ jobs:
         DATE=$(date +'%Y-%m-%d')-run-${{ github.run_number }}
         cp -f new-boot.img $GITHUB_WORKSPACE/boot-${DATE}.img
         echo "BUILD_DATE=${DATE}" >> $GITHUB_ENV
-
+    
+    - name: Wait for in-progress Manager CI
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -eo pipefail
+        LATEST=$(gh run list --repo KernelSU-Next/KernelSU-Next \
+          --workflow "Build Manager CI" --branch dev --limit 1 \
+          --json databaseId,status -q '.[0] | "\(.databaseId) \(.status)"' || true)
+        ID=$(echo "$LATEST" | cut -d' ' -f1)
+        STATUS=$(echo "$LATEST" | cut -d' ' -f2)
+        if [ -n "$ID" ] && [ "$STATUS" != "completed" ]; then
+          echo "Manager CI run $ID is $STATUS, waiting (max 15 min)..."
+          for i in $(seq 1 15); do
+            S=$(gh run view "$ID" --repo KernelSU-Next/KernelSU-Next --json status -q .status || echo unknown)
+            [ "$S" = "completed" ] && break
+            sleep 60
+          done
+        fi
+    
     - name: Get Latest Manager CI Run
       id: manager
       env:
