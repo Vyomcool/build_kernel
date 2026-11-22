@@ -25,11 +25,11 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        KSUN=$(git ls-remote https://github.com/pershoot/KernelSU-Next.git refs/heads/dev-susfs | cut -f1)
+        KSU=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
         SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
         NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
-        if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
-        CURRENT="upstream: ksun=${KSUN} susfs=${SUSFS} nomount=${NOMOUNT}"
+        if [ -z "$KSU" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
+        CURRENT="upstream: ksu=${KSU} susfs=${SUSFS} nomount=${NOMOUNT}"
         BODY=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null || true)
         LAST=$(echo "$BODY" | grep '^upstream:' || true)
 
@@ -42,16 +42,16 @@ jobs:
         echo "changed=false" >> "$GITHUB_OUTPUT"
 
         latest_success() {
-          gh run list --repo "$1" --workflow "$2" --branch dev --status success \
+          gh run list --repo "$1" --workflow "$2" --branch "$3" --status success \
             --limit 1 --json number -q '.[0].number' 2>/dev/null || true
         }
         is_newer() {
           [ -n "$1" ] && { [ -z "$2" ] || [ "$1" -gt "$2" ]; }
         }
 
-        NEW_MGR=$(latest_success KernelSU-Next/KernelSU-Next "Build Manager CI")
-        REL_MGR=$(echo "$BODY" | grep -o 'Build Manager CI #[0-9]*' | grep -o '[0-9]*$' || true)
-        NEW_MOD=$(latest_success maxsteeel/nomount "build module")
+        NEW_MGR=$(latest_success tiann/KernelSU "Build Manager" main)
+        REL_MGR=$(echo "$BODY" | grep -o 'Build Manager #[0-9]*' | grep -o '[0-9]*$' || true)
+        NEW_MOD=$(latest_success maxsteeel/nomount "build module" dev)
         REL_MOD=$(echo "$BODY" | grep -o 'build module #[0-9]*' | grep -o '[0-9]*$' || true)
         echo "Manager: release ${REL_MGR:-none}, latest ${NEW_MGR:-none}"
         echo "Module:  release ${REL_MOD:-none}, latest ${NEW_MOD:-none}"
@@ -103,7 +103,7 @@ jobs:
       run: |
         set -eo pipefail
         latest_run() {
-          gh run list --repo "$1" --workflow "$2" --branch dev --status success \
+          gh run list --repo "$1" --workflow "$2" --branch "$3" --status success \
             --limit 1 --json number,url,headSha \
             -q '.[0] | "\(.url) \(.headSha) \(.number)"'
         }
@@ -115,11 +115,11 @@ jobs:
         MOD_LINE=$(grep '^Module (' body.md || true)
 
         if [ "$UPD_MGR" = "true" ]; then
-          read -r URL SHA NUM <<< "$(latest_run KernelSU-Next/KernelSU-Next "Build Manager CI")"
-          MGR_LINE="Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}"
+          read -r URL SHA NUM <<< "$(latest_run tiann/KernelSU "Build Manager" main)"
+          MGR_LINE="Manager (Build Manager #${NUM}, commit ${SHA:0:7}): ${URL}"
         fi
         if [ "$UPD_MOD" = "true" ]; then
-          read -r URL SHA NUM <<< "$(latest_run maxsteeel/nomount "build module")"
+          read -r URL SHA NUM <<< "$(latest_run maxsteeel/nomount "build module" dev)"
           MOD_LINE="Module (build module #${NUM}, commit ${SHA:0:7}): ${URL}"
         fi
 
@@ -149,11 +149,11 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -eo pipefail
-        KSUN=$(git ls-remote https://github.com/pershoot/KernelSU-Next.git refs/heads/dev-susfs | cut -f1)
+        KSU=$(git ls-remote https://github.com/tiann/KernelSU.git refs/heads/main | cut -f1)
         SUSFS=$(git ls-remote https://gitlab.com/simonpunk/susfs4ksu.git refs/heads/gki-android14-6.1-dev | cut -f1)
         NOMOUNT=$(git ls-remote https://github.com/maxsteeel/nomount.git refs/heads/dev | cut -f1)
-        if [ -z "$KSUN" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
-        CURRENT="upstream: ksun=${KSUN} susfs=${SUSFS} nomount=${NOMOUNT}"
+        if [ -z "$KSU" ] || [ -z "$SUSFS" ] || [ -z "$NOMOUNT" ]; then exit 1; fi
+        CURRENT="upstream: ksu=${KSU} susfs=${SUSFS} nomount=${NOMOUNT}"
         LAST=$(gh release view --repo "$GITHUB_REPOSITORY" --json body -q .body 2>/dev/null | grep '^upstream:' || true)
         if [ "$LAST" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
           echo "Already released, cancelling."
@@ -207,7 +207,7 @@ jobs:
         rm -rf magisk.zip magisk_tmp
         wget -qO magiskboot/boot.img "https://github.com/Vyomcool/boot.img/releases/download/shiba-cp4a.261105.040.a1/boot.img"
 
-        curl -fsSL "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+        curl -fsSL "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
 
         git clone --depth=1 --branch gki-android14-6.1-dev --single-branch https://gitlab.com/simonpunk/susfs4ksu.git
         cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
@@ -221,10 +221,10 @@ jobs:
 
         curl -fsSL https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -s dev
 
-        KSUN_SHA=$(git -C KernelSU-Next rev-parse HEAD)
+        KSU_SHA=$(git -C KernelSU rev-parse HEAD)
         SUSFS_SHA=$(git -C susfs4ksu rev-parse HEAD)
         NOMOUNT_SHA=$(git -C NoMount rev-parse HEAD)
-        echo "BUILT_SHAS=upstream: ksun=${KSUN_SHA} susfs=${SUSFS_SHA} nomount=${NOMOUNT_SHA}" >> $GITHUB_ENV
+        echo "BUILT_SHAS=upstream: ksu=${KSU_SHA} susfs=${SUSFS_SHA} nomount=${NOMOUNT_SHA}" >> $GITHUB_ENV
 
         rm common/android/abi_gki_protected_exports_aarch64
         rm common/android/abi_gki_protected_exports_x86_64
@@ -255,9 +255,9 @@ jobs:
       run: |
         set -eo pipefail
         PENDING=""
-        for SPEC in "KernelSU-Next/KernelSU-Next|Build Manager CI|15" "maxsteeel/nomount|build module|5"; do
-          IFS='|' read -r REPO WF MAX <<< "$SPEC"
-          LATEST=$(gh run list --repo "$REPO" --workflow "$WF" --branch dev --limit 1 \
+        for SPEC in "tiann/KernelSU|Build Manager|main|15" "maxsteeel/nomount|build module|dev|5"; do
+          IFS='|' read -r REPO WF BRANCH MAX <<< "$SPEC"
+          LATEST=$(gh run list --repo "$REPO" --workflow "$WF" --branch "$BRANCH" --limit 1 \
             --json databaseId,status -q '.[0] | "\(.databaseId) \(.status)"' || true)
           ID="${LATEST%% *}"
           STATUS="${LATEST#* }"
@@ -297,20 +297,20 @@ jobs:
       run: |
         set -eo pipefail
         latest_run() {
-          gh run list --repo "$1" --workflow "$2" --branch dev --status success \
+          gh run list --repo "$1" --workflow "$2" --branch "$3" --status success \
             --limit 1 --json number,url,headSha \
             -q '.[0] | "\(.url) \(.headSha) \(.number)"' || true
         }
 
-        RUN=$(latest_run KernelSU-Next/KernelSU-Next "Build Manager CI")
+        RUN=$(latest_run tiann/KernelSU "Build Manager" main)
         if [ -n "$RUN" ]; then
           read -r URL SHA NUM <<< "$RUN"
-          echo "manager=Manager (Build Manager CI #${NUM}, commit ${SHA:0:7}): ${URL}" >> "$GITHUB_OUTPUT"
+          echo "manager=Manager (Build Manager #${NUM}, commit ${SHA:0:7}): ${URL}" >> "$GITHUB_OUTPUT"
         else
-          echo "manager=Manager (dev CI): not found" >> "$GITHUB_OUTPUT"
+          echo "manager=Manager (main CI): not found" >> "$GITHUB_OUTPUT"
         fi
 
-        RUN=$(latest_run maxsteeel/nomount "build module")
+        RUN=$(latest_run maxsteeel/nomount "build module" dev)
         if [ -n "$RUN" ]; then
           read -r URL SHA NUM <<< "$RUN"
           echo "module=Module (build module #${NUM}, commit ${SHA:0:7}): ${URL}" >> "$GITHUB_OUTPUT"
